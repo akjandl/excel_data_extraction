@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::error::Error;
 use std::fs;
 use std::io;
@@ -6,6 +5,7 @@ use std::path::{Path, PathBuf};
 
 use calamine::{open_workbook, Reader, Xlsx};
 use regex::{Regex, RegexBuilder};
+use std::iter::FlatMap;
 
 const ROOT_DIR: &str = "C:/Users/andre/Desktop/ExtractionTestData";
 const YEAR_DIR_REGEX: &str = r"\d{4}";
@@ -46,8 +46,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     let test_type_regex =
         get_regex(test_type.as_str()).expect("Could not find regex for test type");
 
-    let cg_files = find_cg_files(&root_path, &test_type_regex);
-    cg_files.into_iter().map(|e| try_open_wb(&e)).for_each(drop);
+    // let cg_files = find_cg_files(&root_path, &test_type_regex);
+    let cg_files = get_cg_files(&root_path, &test_type_regex)?;
+    for file in cg_files {
+        try_open_wb(&file);
+    }
 
     Ok(())
 }
@@ -59,6 +62,7 @@ fn find_cg_files(root: &PathBuf, regex_struct: &TestTypeRegex) -> Vec<PathBuf> {
         .case_insensitive(true)
         .build()
         .unwrap();
+
     match_child_paths(&root, &year_regex)
         .iter()
         .filter(|p| p.is_dir())
@@ -70,6 +74,73 @@ fn find_cg_files(root: &PathBuf, regex_struct: &TestTypeRegex) -> Vec<PathBuf> {
         .filter(|p| p.is_dir())
         .flat_map(|p| match_child_paths(&p, &regex_struct.file))
         .collect()
+}
+
+fn get_cg_files(root: &PathBuf, regex_struct: &TestTypeRegex) -> Result<Vec<PathBuf>, io::Error> {
+    let year_regex = Regex::new(YEAR_DIR_REGEX).unwrap();
+    let months_regex = Regex::new(MONTH_DIR_REGEX).unwrap();
+    let days_regex = RegexBuilder::new(DAY_DIR_REGEX)
+        .case_insensitive(true)
+        .build()
+        .unwrap();
+
+    let year_dirs: Vec<PathBuf> = fs::read_dir(root)?
+        .filter_map(|r| filter_by_filename(r, &year_regex))
+        .map(|dir_ent| dir_ent.path())
+        .filter(|p| p.is_dir())
+        .collect();
+
+    let mut month_dirs: Vec<PathBuf> = vec!();
+    for dir in year_dirs {
+        let dir_reader = fs::read_dir(dir)?;
+        let dirs = dir_reader
+            .filter(|dr| dr.is_ok())
+            .filter_map(|dr| filter_file(dr, &months_regex))
+            .filter(|d| d.is_dir());
+        month_dirs.extend(dirs)
+    }
+
+    let day_dirs: Vec<PathBuf> = month_dirs
+        .iter()
+        .map(fs::read_dir)
+        .filter(|d| d.is_ok())
+        .map(|d| d.unwrap())
+        .flat_map(|read_dir| read_dir.filter_map(|d| filter_file(d, &days_regex)))
+        .filter(|p| p.is_dir())
+        .collect();
+
+    let cg_dirs: Vec<PathBuf> = day_dirs
+        .iter()
+        .map(fs::read_dir)
+        .filter(|d| d.is_ok())
+        .map(|d| d.unwrap())
+        .flat_map(|read_dir| read_dir.filter_map(|d| filter_file(d, &regex_struct.folder)))
+        .filter(|p| p.is_dir())
+        .collect();
+
+    let files: Vec<PathBuf> = cg_dirs
+        .iter()
+        .map(fs::read_dir)
+        .filter(|d| d.is_ok())
+        .map(|d| d.unwrap())
+        .flat_map(|read_dir| read_dir.filter_map(|d| filter_file(d, &regex_struct.file)))
+        .collect();
+
+    Ok(files)
+}
+
+fn filter_file(dir: Result<fs::DirEntry, io::Error>, pattern: &Regex) -> Option<PathBuf> {
+    match dir {
+        Ok(dir_entry) => {
+            if pattern.is_match(dir_entry.path().file_name().unwrap().to_str().unwrap()) {
+                Some(dir_entry.path())
+            }
+            else {
+                None
+            }
+        },
+        Err(_) => None
+    }
 }
 
 fn match_child_paths(parent_dir: &PathBuf, child_regex: &Regex) -> Vec<PathBuf> {
@@ -123,32 +194,4 @@ fn get_regex(test_type: &str) -> Option<TestTypeRegex> {
         )),
         _ => None,
     }
-}
-
-fn build_regex_map<'a>() -> HashMap<&'a str, TestTypeRegex> {
-    // Cert gen directory regex lookup HashMap
-    let mut regex_map: HashMap<&str, TestTypeRegex> = HashMap::new();
-    regex_map.insert(
-        "botanacor_potency",
-        TestTypeRegex::new(
-            r"^botanacor potency ",
-            r"^cert generator botanacor potency .*\.xlsm$",
-        ),
-    );
-    regex_map.insert(
-        "botanacor_metals",
-        TestTypeRegex::new(
-            r"^botanacor metals ",
-            r"^cert generator botanacor metals .*\.xlsm$",
-        ),
-    );
-    regex_map.insert(
-        "botanacor_micro",
-        TestTypeRegex::new(
-            "^validated botanacor micro ",
-            r"^cert generator botanacor micro .*\.xlsm$",
-        ),
-    );
-
-    regex_map
 }
