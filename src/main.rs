@@ -1,11 +1,14 @@
 use std::error::Error;
 use std::fs;
+use std::fs::File;
 use std::io;
+use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
 
-use calamine::{open_workbook, Reader, Xlsx};
+use calamine::{open_workbook, DataType, Reader, Xlsx};
 use regex::{Regex, RegexBuilder};
-use std::iter::FlatMap;
+
+mod excel_tools;
 
 const ROOT_DIR: &str = "C:/Users/andre/Desktop/ExtractionTestData";
 const YEAR_DIR_REGEX: &str = r"\d{4}";
@@ -41,17 +44,61 @@ fn main() -> Result<(), Box<dyn Error>> {
     let test_name_param = "micro".to_string(); // simulating getting from cli
     let test_type: String = vec![company_param, test_name_param].join("_");
 
-    // let regex_map = build_regex_map();
-    // let test_type_regex = regex_map.get(test_type.as_str()).unwrap();
     let test_type_regex =
         get_regex(test_type.as_str()).expect("Could not find regex for test type");
 
-    // let cg_files = find_cg_files(&root_path, &test_type_regex);
-    let cg_files = get_cg_files(&root_path, &test_type_regex)?;
+    let cg_files = find_cg_files(&root_path, &test_type_regex);
+    let sheets = excel_tools::get_botanacor_micro_sheets();
+
+    let mut output_data = vec![];
     for file in cg_files {
-        try_open_wb(&file);
+        println!(
+            "Processing: {}",
+            file.file_name().unwrap().to_str().unwrap()
+        );
+        let mut excel: Xlsx<_> = open_workbook(&file)?;
+        let mut active_rows = vec![];
+        if let Some(Ok(ws)) = excel.worksheet_range("Master List") {
+            active_rows = excel_tools::find_active_rows(&ws, 1, None);
+        }
+        for row in active_rows.iter() {
+            let mut row_data = vec![];
+            for sheet in sheets.iter() {
+                if let Some(Ok(ws)) = excel.worksheet_range(&sheet.sheet_name) {
+                    let row_vals = excel_tools::row_values_from_sheet(&ws, sheet, *row);
+                    row_data.extend(row_vals);
+                }
+            }
+            println!("{:?}", row_data);
+            output_data.push(row_data);
+        }
     }
 
+    let output_path = PathBuf::from("output_file").with_extension("csv");
+    let mut output_file = BufWriter::new(File::create(output_path).unwrap());
+    write_data(&mut output_file, output_data)?;
+
+    Ok(())
+}
+
+fn write_data<W: Write>(dest: &mut W, data: Vec<Vec<DataType>>) -> std::io::Result<()> {
+    for row in data.iter() {
+        let row_len = row.len() - 1;
+        for (i, d) in row.iter().enumerate() {
+            match d {
+                DataType::Empty => Ok(()),
+                DataType::String(ref s) => write!(dest, "{}", s),
+                DataType::Float(ref f) => write!(dest, "{}", f),
+                DataType::Int(ref i) => write!(dest, "{}", i),
+                DataType::Error(ref e) => write!(dest, "{:?}", e),
+                DataType::Bool(ref b) => write!(dest, "{}", b),
+            }?;
+            if i != row_len {
+                write!(dest, ",")?;
+            }
+        }
+        write!(dest, "\r\n")?;
+    }
     Ok(())
 }
 
@@ -76,73 +123,6 @@ fn find_cg_files(root: &PathBuf, regex_struct: &TestTypeRegex) -> Vec<PathBuf> {
         .collect()
 }
 
-fn get_cg_files(root: &PathBuf, regex_struct: &TestTypeRegex) -> Result<Vec<PathBuf>, io::Error> {
-    let year_regex = Regex::new(YEAR_DIR_REGEX).unwrap();
-    let months_regex = Regex::new(MONTH_DIR_REGEX).unwrap();
-    let days_regex = RegexBuilder::new(DAY_DIR_REGEX)
-        .case_insensitive(true)
-        .build()
-        .unwrap();
-
-    let year_dirs: Vec<PathBuf> = fs::read_dir(root)?
-        .filter_map(|r| filter_by_filename(r, &year_regex))
-        .map(|dir_ent| dir_ent.path())
-        .filter(|p| p.is_dir())
-        .collect();
-
-    let mut month_dirs: Vec<PathBuf> = vec!();
-    for dir in year_dirs {
-        let dir_reader = fs::read_dir(dir)?;
-        let dirs = dir_reader
-            .filter(|dr| dr.is_ok())
-            .filter_map(|dr| filter_file(dr, &months_regex))
-            .filter(|d| d.is_dir());
-        month_dirs.extend(dirs)
-    }
-
-    let day_dirs: Vec<PathBuf> = month_dirs
-        .iter()
-        .map(fs::read_dir)
-        .filter(|d| d.is_ok())
-        .map(|d| d.unwrap())
-        .flat_map(|read_dir| read_dir.filter_map(|d| filter_file(d, &days_regex)))
-        .filter(|p| p.is_dir())
-        .collect();
-
-    let cg_dirs: Vec<PathBuf> = day_dirs
-        .iter()
-        .map(fs::read_dir)
-        .filter(|d| d.is_ok())
-        .map(|d| d.unwrap())
-        .flat_map(|read_dir| read_dir.filter_map(|d| filter_file(d, &regex_struct.folder)))
-        .filter(|p| p.is_dir())
-        .collect();
-
-    let files: Vec<PathBuf> = cg_dirs
-        .iter()
-        .map(fs::read_dir)
-        .filter(|d| d.is_ok())
-        .map(|d| d.unwrap())
-        .flat_map(|read_dir| read_dir.filter_map(|d| filter_file(d, &regex_struct.file)))
-        .collect();
-
-    Ok(files)
-}
-
-fn filter_file(dir: Result<fs::DirEntry, io::Error>, pattern: &Regex) -> Option<PathBuf> {
-    match dir {
-        Ok(dir_entry) => {
-            if pattern.is_match(dir_entry.path().file_name().unwrap().to_str().unwrap()) {
-                Some(dir_entry.path())
-            }
-            else {
-                None
-            }
-        },
-        Err(_) => None
-    }
-}
-
 fn match_child_paths(parent_dir: &PathBuf, child_regex: &Regex) -> Vec<PathBuf> {
     fs::read_dir(parent_dir)
         .unwrap()
@@ -164,17 +144,6 @@ fn filter_by_filename(
             }
         }
         Err(_) => None,
-    }
-}
-
-fn try_open_wb(path: &PathBuf) {
-    println!("Opening {}", path.display());
-    let mut excel: Xlsx<_> = open_workbook(path).unwrap();
-    if let Some(Ok(r)) = excel.worksheet_range("Master List") {
-        let b1 = r.get_value((0, 1));
-        println!("{:?}", b1.unwrap());
-        // let header = r.rows().next().unwrap();
-        // println!("row[0]={:?}", header[1]);
     }
 }
 
