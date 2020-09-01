@@ -48,8 +48,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         get_regex(test_type.as_str()).expect("Could not find regex for test type");
 
     let cg_files = find_cg_files(&root_path, &test_type_regex);
-    let sheets = excel_tools::get_botanacor_micro_sheets();
-
+    let extractors = excel_tools::get_botanacor_micro_extractors();
     let mut output_data = vec![];
     for file in cg_files {
         println!(
@@ -57,26 +56,49 @@ fn main() -> Result<(), Box<dyn Error>> {
             file.file_name().unwrap().to_str().unwrap()
         );
         let mut excel: Xlsx<_> = open_workbook(&file)?;
+
+        let validated_extractors = excel_tools::validate_extractors(&mut excel, &extractors);
+        if validated_extractors.is_none() {
+            println!(
+                "File failed sheet validation and will be skipped: {}",
+                file.to_str().unwrap()
+            );
+            continue;
+        }
+
         let mut active_rows = vec![];
         if let Some(Ok(ws)) = excel.worksheet_range("Master List") {
             active_rows = excel_tools::find_active_rows(&ws, 1, None);
         }
-        for row in active_rows.iter() {
-            let mut row_data = vec![];
-            for sheet in sheets.iter() {
-                if let Some(Ok(ws)) = excel.worksheet_range(&sheet.sheet_name) {
-                    let row_vals = excel_tools::row_values_from_sheet(&ws, sheet, *row);
-                    row_data.extend(row_vals);
-                }
+
+        let max_row: u32 = 201;
+        let mut col_vecs = vec![];
+        for sheet in validated_extractors.unwrap().iter() {
+            if let Some(Ok(ws)) = excel.worksheet_range(&sheet.sheet_name) {
+                col_vecs.extend(excel_tools::extract_sheet_columns(&ws, &sheet, max_row));
             }
-            println!("{:?}", row_data);
-            output_data.push(row_data);
         }
+        output_data.extend(excel_tools::rows_from_cols(col_vecs, active_rows));
     }
 
     let output_path = PathBuf::from("output_file").with_extension("csv");
     let mut output_file = BufWriter::new(File::create(output_path).unwrap());
+    let header = excel_tools::make_header(&extractors);
+    write_header(&mut output_file, header)?;
     write_data(&mut output_file, output_data)?;
+
+    Ok(())
+}
+
+fn write_header<W: Write>(dest: &mut W, header: Vec<&str>) -> std::io::Result<()> {
+    let len_header = header.len() - 1;
+    for (i, h) in header.iter().enumerate() {
+        write!(dest, r#""{}""#, h)?;
+        if i != len_header {
+            write!(dest, ",")?;
+        }
+    }
+    write!(dest, "\r\n")?;
 
     Ok(())
 }
@@ -87,7 +109,7 @@ fn write_data<W: Write>(dest: &mut W, data: Vec<Vec<DataType>>) -> std::io::Resu
         for (i, d) in row.iter().enumerate() {
             match d {
                 DataType::Empty => Ok(()),
-                DataType::String(ref s) => write!(dest, "{}", s),
+                DataType::String(ref s) => write!(dest, r#""{}""#, s),
                 DataType::Float(ref f) => write!(dest, "{}", f),
                 DataType::Int(ref i) => write!(dest, "{}", i),
                 DataType::Error(ref e) => write!(dest, "{:?}", e),
