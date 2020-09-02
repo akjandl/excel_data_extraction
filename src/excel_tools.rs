@@ -29,8 +29,19 @@ pub fn find_active_rows(ws: &Range<DataType>, search_col: u32, last_row: Option<
     active_rows
 }
 
-pub fn extract_column(range: &Range<DataType>, col_num: u32, max_row: u32) -> Range<DataType> {
-    range.range((1, col_num), (max_row, col_num))
+pub fn extract_column(
+    range: &Range<DataType>,
+    col_indexer: &ColIndexer,
+    max_row: u32,
+) -> Range<DataType> {
+    match col_indexer {
+        ColIndexer::Index(i) => range.range((1, *i), (max_row, *i)),
+        ColIndexer::DefaultValue(dt) => {
+            let mut new_range = Range::new((0, 0), (max_row, 0));
+            (0..max_row).for_each(|i| new_range.set_value((i, 0), dt.clone()));
+            new_range
+        }
+    }
 }
 
 pub fn extract_sheet_columns(
@@ -39,8 +50,8 @@ pub fn extract_sheet_columns(
     max_row: u32,
 ) -> Vec<Range<DataType>> {
     let mut cols = vec![];
-    for col in sheet.col_indexers.iter() {
-        cols.push(extract_column(range, *col, max_row))
+    for indexer in sheet.col_indexers.iter() {
+        cols.push(extract_column(range, indexer, max_row))
     }
     cols
 }
@@ -51,9 +62,11 @@ pub fn rows_from_cols(cols: Vec<Range<DataType>>, active_rows: Vec<u32>) -> Vec<
         let mut cur_row = vec![];
         for col in cols.iter() {
             cur_row.push(
-                col.get_value((*row, col.start().unwrap().1))
-                    .unwrap()
-                    .clone(),
+                // Get range values by relative position in column.
+                // Subtract 1 from the row since the `active_rows` should always
+                // be offset by 1.
+                col.get(((*row - 1) as usize, 0 as usize)).unwrap().clone(),
+                // col.get((*row as usize, col.start().unwrap().1 as usize))
             );
         }
         rows_data.push(cur_row);
@@ -72,10 +85,16 @@ pub fn make_header(sheets: &[SheetExtractor]) -> Vec<&'static str> {
 }
 
 #[derive(Clone)]
+pub enum ColIndexer {
+    Index(u32),
+    DefaultValue(DataType),
+}
+
+#[derive(Clone)]
 pub struct Sheet {
     pub sheet_name: &'static str,
     pub col_names: Vec<&'static str>,
-    pub col_indexers: Vec<u32>,
+    pub col_indexers: Vec<ColIndexer>,
 }
 
 pub enum SheetExtractor {
@@ -85,7 +104,7 @@ pub enum SheetExtractor {
 
 struct PotentialSheet {
     sheet_name: &'static str,
-    col_indexers: Vec<u32>,
+    col_indexers: Vec<ColIndexer>,
     sheet_for_val: &'static str,
     validator: fn(ws: &Range<DataType>) -> bool,
 }
@@ -134,38 +153,99 @@ pub fn validate_extractors<RS: Read + Seek>(
 }
 
 pub fn get_botanacor_micro_extractors() -> Vec<SheetExtractor> {
+    let mid_2020_validator = ("AgrBotMap", |ws: &Range<DataType>| {
+        if let Some(dt) = ws.get_value((0, 3)) {
+            match dt {
+                DataType::String(s) => s == &"AgricorSampleName".to_string(),
+                _ => false,
+            }
+        } else {
+            false
+        }
+    });
+    let early_2020_validator = ("Master List", |ws: &Range<DataType>| {
+        if let Some(dt) = ws.get_value((0, 1)) {
+            match dt {
+                DataType::String(s) => s == &"Test Id".to_string(),
+                _ => false,
+            }
+        } else {
+            false
+        }
+    });
+    let pre_test_id_validator = ("Master List", |ws: &Range<DataType>| {
+        if let Some(dt) = ws.get_value((0, 1)) {
+            match dt {
+                DataType::String(s) => s.starts_with("Company Name"),
+                _ => false,
+            }
+        } else {
+            false
+        }
+    });
+
     let test_id_sheet = SheetExtractor::Multi(SheetSelector {
         col_names: vec!["Test Id"],
         potential_sheets: vec![
             PotentialSheet {
                 sheet_name: "AgrBotMap",
-                col_indexers: vec![3],
-                sheet_for_val: "AgrBotMap",
-                validator: |ws| {
-                    if let Some(dt) = ws.get_value((0, 3)) {
-                        match dt {
-                            DataType::String(s) => s == &"AgricorSampleName".to_string(),
-                            _ => false,
-                        }
-                    } else {
-                        false
-                    }
-                },
+                col_indexers: vec![ColIndexer::Index(3)],
+                sheet_for_val: mid_2020_validator.0,
+                validator: mid_2020_validator.1,
             },
             PotentialSheet {
                 sheet_name: "Master List",
-                col_indexers: vec![1],
-                sheet_for_val: "Master List",
-                validator: |ws| {
-                    if let Some(dt) = ws.get_value((0, 1)) {
-                        match dt {
-                            DataType::String(s) => s == &"Test Id".to_string(),
-                            _ => false,
-                        }
-                    } else {
-                        false
-                    }
-                },
+                col_indexers: vec![ColIndexer::Index(1)],
+                sheet_for_val: early_2020_validator.0,
+                validator: early_2020_validator.1,
+            },
+            PotentialSheet {
+                sheet_name: "Master List",
+                col_indexers: vec![ColIndexer::DefaultValue(DataType::String("NA".to_string()))],
+                sheet_for_val: pre_test_id_validator.0,
+                validator: pre_test_id_validator.1,
+            },
+        ],
+    });
+
+    let sample_info_sheet = SheetExtractor::Multi(SheetSelector {
+        col_names: vec![
+            "Company",
+            "Sample Name",
+            "Sample Type",
+            "PBST wt (g)",
+            "PBST vol (mL)",
+            "Enrichment wt (g)",
+            "Enrichment vol (mL)",
+        ],
+        potential_sheets: vec![
+            PotentialSheet {
+                sheet_name: "Master List",
+                col_indexers: vec![
+                    ColIndexer::Index(6),
+                    ColIndexer::Index(8),
+                    ColIndexer::Index(10),
+                    ColIndexer::Index(11),
+                    ColIndexer::Index(13),
+                    ColIndexer::Index(12),
+                    ColIndexer::Index(14),
+                ],
+                sheet_for_val: early_2020_validator.0,
+                validator: early_2020_validator.1,
+            },
+            PotentialSheet {
+                sheet_name: "Master List",
+                col_indexers: vec![
+                    ColIndexer::Index(2),
+                    ColIndexer::Index(3),
+                    ColIndexer::Index(5),
+                    ColIndexer::Index(6),
+                    ColIndexer::Index(8),
+                    ColIndexer::Index(7),
+                    ColIndexer::Index(9),
+                ],
+                sheet_for_val: pre_test_id_validator.0,
+                validator: pre_test_id_validator.1,
             },
         ],
     });
@@ -173,8 +253,40 @@ pub fn get_botanacor_micro_extractors() -> Vec<SheetExtractor> {
     let tym_values = SheetExtractor::Single(Sheet {
         sheet_name: "TYM Values",
         col_names: vec!["TYM CFU Count", "TYM Dil. Plate", "TYM Reported CFU/g"],
-        col_indexers: vec![4, 5, 6],
+        col_indexers: vec![
+            ColIndexer::Index(4),
+            ColIndexer::Index(5),
+            ColIndexer::Index(6),
+        ],
+    });
+    let tot_aerobic_values = SheetExtractor::Single(Sheet {
+        sheet_name: "Total Aerobic",
+        col_names: vec!["TA CFU Count", "TA Dil. Plate", "TA Reported CFU/g"],
+        col_indexers: vec![
+            ColIndexer::Index(4),
+            ColIndexer::Index(5),
+            ColIndexer::Index(6),
+        ],
+    });
+    let tot_col_values = SheetExtractor::Single(Sheet {
+        sheet_name: "Total Coliforms",
+        col_names: vec![
+            "Coliforms CFU Count",
+            "Coliforms Dil. Plate",
+            "Coliforms Reported CFU/g",
+        ],
+        col_indexers: vec![
+            ColIndexer::Index(4),
+            ColIndexer::Index(5),
+            ColIndexer::Index(6),
+        ],
     });
 
-    vec![test_id_sheet, tym_values]
+    vec![
+        test_id_sheet,
+        sample_info_sheet,
+        tym_values,
+        tot_aerobic_values,
+        tot_col_values,
+    ]
 }

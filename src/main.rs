@@ -10,35 +10,18 @@ use regex::{Regex, RegexBuilder};
 
 mod excel_tools;
 
-const ROOT_DIR: &str = "C:/Users/andre/Desktop/ExtractionTestData";
-const YEAR_DIR_REGEX: &str = r"\d{4}";
+// const ROOT_DIR: &str = "C:/Users/andre/Desktop/ExtractionTestData";
+const YEAR_DIR_REGEX: &str = r"(2019)|(2020)";
 const MONTH_DIR_REGEX: &str = r"\d{1,2}";
 const DAY_DIR_REGEX: &str = r"\d{2}-[[:alpha:]]{3}-\d{4}";
-
-struct TestTypeRegex {
-    pub folder: Regex,
-    pub file: Regex,
-}
-
-impl TestTypeRegex {
-    fn new(folder_regex: &str, file_regex: &str) -> Self {
-        TestTypeRegex {
-            folder: RegexBuilder::new(folder_regex)
-                .case_insensitive(true)
-                .build()
-                .unwrap(),
-            file: RegexBuilder::new(file_regex)
-                .case_insensitive(true)
-                .build()
-                .unwrap(),
-        }
-    }
-}
 
 fn main() -> Result<(), Box<dyn Error>> {
     // setup variables
     // TODO: read root dir string from a config file
-    let root_path = Path::new(ROOT_DIR).to_path_buf();
+    // let root_path = Path::new(ROOT_DIR).to_path_buf();
+    let args: Vec<String> = std::env::args().collect();
+    println!("Searching in: {}", &args[1]);
+    let root_path = Path::new(&args[1]).to_path_buf();
     // TODO: get company name & test name from cli
     let company_param = "botanacor".to_string(); // simulating getting from cli
     let test_name_param = "micro".to_string(); // simulating getting from cli
@@ -48,12 +31,14 @@ fn main() -> Result<(), Box<dyn Error>> {
         get_regex(test_type.as_str()).expect("Could not find regex for test type");
 
     let cg_files = find_cg_files(&root_path, &test_type_regex);
+    println!("Files to be processed: {}", cg_files.len());
+
     let extractors = excel_tools::get_botanacor_micro_extractors();
     let mut output_data = vec![];
-    for file in cg_files {
+    for file in cg_files.iter() {
         println!(
             "Processing: {}",
-            file.file_name().unwrap().to_str().unwrap()
+            file.to_str().unwrap()
         );
         let mut excel: Xlsx<_> = open_workbook(&file)?;
 
@@ -78,14 +63,24 @@ fn main() -> Result<(), Box<dyn Error>> {
                 col_vecs.extend(excel_tools::extract_sheet_columns(&ws, &sheet, max_row));
             }
         }
-        output_data.extend(excel_tools::rows_from_cols(col_vecs, active_rows));
+
+        // Transform columns to rows and push file path to end of each row
+        let file_name_dt = DataType::String(String::from(file.to_str().unwrap()));
+        let mut rows = excel_tools::rows_from_cols(col_vecs, active_rows);
+        rows.iter_mut().for_each(|r| r.push(file_name_dt.clone()));
+
+        output_data.extend(rows);
     }
 
+    let mut header = excel_tools::make_header(&extractors);
+    header.push("File Path");
     let output_path = PathBuf::from("output_file").with_extension("csv");
     let mut output_file = BufWriter::new(File::create(output_path).unwrap());
-    let header = excel_tools::make_header(&extractors);
     write_header(&mut output_file, header)?;
     write_data(&mut output_file, output_data)?;
+
+    println!("\n\nPress ENTER key to exit ...\n");
+    io::stdin().read_line(&mut String::new())?;
 
     Ok(())
 }
@@ -166,6 +161,26 @@ fn filter_by_filename(
             }
         }
         Err(_) => None,
+    }
+}
+
+struct TestTypeRegex {
+    pub folder: Regex,
+    pub file: Regex,
+}
+
+impl TestTypeRegex {
+    fn new(folder_regex: &str, file_regex: &str) -> Self {
+        TestTypeRegex {
+            folder: RegexBuilder::new(folder_regex)
+                .case_insensitive(true)
+                .build()
+                .unwrap(),
+            file: RegexBuilder::new(file_regex)
+                .case_insensitive(true)
+                .build()
+                .unwrap(),
+        }
     }
 }
 
