@@ -9,6 +9,9 @@ use calamine::{open_workbook, DataType, Reader, Xlsx};
 use regex::{Regex, RegexBuilder};
 
 mod excel_tools;
+mod extractors;
+
+use extractors::get_extractors;
 
 // const ROOT_DIR: &str = "C:/Users/andre/Desktop/ExtractionTestData";
 const YEAR_DIR_REGEX: &str = r"(2019)|(2020)";
@@ -17,14 +20,12 @@ const DAY_DIR_REGEX: &str = r"\d{2}-[[:alpha:]]{3}-\d{4}";
 
 fn main() -> Result<(), Box<dyn Error>> {
     // setup variables
-    // TODO: read root dir string from a config file
-    // let root_path = Path::new(ROOT_DIR).to_path_buf();
     let args: Vec<String> = std::env::args().collect();
     println!("Searching in: {}", &args[1]);
     let root_path = Path::new(&args[1]).to_path_buf();
     // TODO: get company name & test name from cli
-    let company_param = "botanacor".to_string(); // simulating getting from cli
-    let test_name_param = "micro".to_string(); // simulating getting from cli
+    let company_param = args[2].to_string();
+    let test_name_param = args[3].to_string();
     let test_type: String = vec![company_param, test_name_param].join("_");
 
     let test_type_regex =
@@ -33,13 +34,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     let cg_files = find_cg_files(&root_path, &test_type_regex);
     println!("Files to be processed: {}", cg_files.len());
 
-    let extractors = excel_tools::get_botanacor_micro_extractors();
+    let extractors = get_extractors(&test_type)?;
     let mut output_data = vec![];
     for file in cg_files.iter() {
-        println!(
-            "Processing: {}",
-            file.to_str().unwrap()
-        );
+        println!("Processing: {}", file.to_str().unwrap());
         let mut excel: Xlsx<_> = open_workbook(&file)?;
 
         let validated_extractors = excel_tools::validate_extractors(&mut excel, &extractors);
@@ -56,7 +54,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             active_rows = excel_tools::find_active_rows(&ws, 1, None);
         }
 
-        let max_row: u32 = 201;
+        let max_row: u32 = 200;
         let mut col_vecs = vec![];
         for sheet in validated_extractors.unwrap().iter() {
             if let Some(Ok(ws)) = excel.worksheet_range(&sheet.sheet_name) {
@@ -186,6 +184,7 @@ impl TestTypeRegex {
 
 fn get_regex(test_type: &str) -> Option<TestTypeRegex> {
     match test_type {
+        // Botanacor files
         "botanacor_potency" => Some(TestTypeRegex::new(
             r"^botanacor potency ",
             r"^cert generator botanacor potency .*\.xlsm$",
@@ -197,6 +196,12 @@ fn get_regex(test_type: &str) -> Option<TestTypeRegex> {
         "botanacor_micro" => Some(TestTypeRegex::new(
             "^validated botanacor micro ",
             r"^cert generator botanacor micro .*\.xlsm$",
+        )),
+
+        // Agricor files
+        "agricor_micro" => Some(TestTypeRegex::new(
+            "^agricor micro ",
+            r"^cert generator agricor micro .*\.xlsm$",
         )),
         _ => None,
     }
