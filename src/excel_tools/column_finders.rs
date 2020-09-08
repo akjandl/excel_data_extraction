@@ -33,6 +33,6 @@ pub fn header_match(
     // return range filled with a default string
     let mut default = Range::new((0, 0), (row_count, 0));
     (0..default.height())
-        .for_each(|i| default.set_value((0, i as u32), DataType::String("NA".to_string())));
+        .for_each(|i| default.set_value((i as u32, 0), DataType::String("NA".to_string())));
     default
 }

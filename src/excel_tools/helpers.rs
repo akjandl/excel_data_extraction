@@ -41,7 +41,7 @@ pub fn extract_column(
         ColIndexer::DefaultValue(dt) => {
             // create a new range and fill with provided default value
             let mut new_range = Range::new((0, 0), (max_row, 0));
-            (0..new_range.width()).for_each(|i| new_range.set_value((i as u32, 0), dt.clone()));
+            (0..new_range.height()).for_each(|i| new_range.set_value((i as u32, 0), dt.clone()));
             new_range
         },
         ColIndexer::ColFindFunc(func) => func(range, max_row)
@@ -91,7 +91,6 @@ pub fn make_header(sheets: &[SheetExtractor]) -> Vec<&'static str> {
 pub enum ColIndexer {
     Index(u32),
     DefaultValue(DataType),
-    // ColFindFunc(fn(&Range<DataType>, u32) -> Range<DataType>)
     ColFindFunc(Rc<dyn Fn(&Range<DataType>, u32) -> Range<DataType>>)
 }
 
