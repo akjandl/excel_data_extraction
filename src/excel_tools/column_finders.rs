@@ -20,8 +20,6 @@ pub fn header_match(
         let (_row, col, val) = cell;
         match val {
             DataType::String(s) => {
-                // println!("header text: {}", s);
-                // println!("matching: {}", starts_with);
                 if s.starts_with(starts_with) {
                     return ws.range(
                         (range_offset, col as u32),

@@ -116,7 +116,7 @@ pub struct SheetSelector {
     pub potential_sheets: Vec<PotentialSheet>,
 }
 
-fn sheet_from_selector<'a, RS: Read + Seek>(
+fn sheet_from_selector<RS: Read + Seek>(
     wb: &mut Xlsx<RS>,
     selector: &SheetSelector,
 ) -> Option<Sheet> {
@@ -136,7 +136,7 @@ fn sheet_from_selector<'a, RS: Read + Seek>(
     None
 }
 
-pub fn validate_extractors<'a, RS: Read + Seek>(
+pub fn validate_extractors<RS: Read + Seek>(
     wb: &mut Xlsx<RS>,
     extractors: &[SheetExtractor],
 ) -> Option<Vec<Sheet>> {
