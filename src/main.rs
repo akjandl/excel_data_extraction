@@ -72,7 +72,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let mut header = excel_tools::make_header(&extractors);
     header.push("File Path");
-    let output_path = PathBuf::from("output_file").with_extension("csv");
+    let output_path = PathBuf::from(test_type).with_extension("csv");
     let mut output_file = BufWriter::new(File::create(output_path).unwrap());
     write_header(&mut output_file, header)?;
     write_data(&mut output_file, output_data)?;
@@ -188,6 +188,10 @@ fn get_regex(test_type: &str) -> Option<TestTypeRegex> {
         "botanacor_potency" => Some(TestTypeRegex::new(
             r"^botanacor potency ",
             r"^cert generator botanacor potency .*\.xlsm$",
+        )),
+        "botanacor_pesticides" => Some(TestTypeRegex::new(
+            r"^botanacor pesticides ",
+            r"^cert generator botanacor pesticides .*\.xlsm$",
         )),
         "botanacor_metals" => Some(TestTypeRegex::new(
             r"^botanacor metals ",

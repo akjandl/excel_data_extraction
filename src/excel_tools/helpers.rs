@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use calamine::{DataType, Range, Reader, Xlsx};
 use std::io::{Read, Seek};
 
@@ -89,7 +91,8 @@ pub fn make_header(sheets: &[SheetExtractor]) -> Vec<&'static str> {
 pub enum ColIndexer {
     Index(u32),
     DefaultValue(DataType),
-    ColFindFunc(fn(&Range<DataType>, u32) -> Range<DataType>)
+    // ColFindFunc(fn(&Range<DataType>, u32) -> Range<DataType>)
+    ColFindFunc(Rc<dyn Fn(&Range<DataType>, u32) -> Range<DataType>>)
 }
 
 #[derive(Clone)]
