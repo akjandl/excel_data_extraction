@@ -31,7 +31,7 @@ pub fn get_extractors() -> Vec<SheetExtractor> {
             ColIndexer::ColFindFunc(find_col("Test ID")),
             ColIndexer::ColFindFunc(find_col("Customer License Name")),
             ColIndexer::ColFindFunc(find_col("Customer License Number")),
-            ColIndexer::ColFindFunc(find_col("Manifest Number")),
+            ColIndexer::ColFindFunc(find_col("Manifest")),
             ColIndexer::ColFindFunc(find_col("Sample Name")),
             ColIndexer::ColFindFunc(find_col("Type")),
         ]
