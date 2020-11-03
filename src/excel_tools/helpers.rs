@@ -38,6 +38,16 @@ pub fn extract_column(
 ) -> Range<DataType> {
     match col_indexer {
         ColIndexer::Index(i) => range.range((1, *i), (max_row, *i)),
+        ColIndexer::CellValue(row, col) => {
+            // create a new range and fill with a single value from a specific cell
+            let mut new_range = Range::new((0, 0), (max_row, 0));
+            let cell_val = match range.get_value((*row, *col)) {
+                Some(dt) => dt,
+                None => &DataType::Empty
+            };
+            (0..new_range.height()).for_each(|i| new_range.set_value((i as u32, 0), cell_val.clone()));
+            new_range
+        },
         ColIndexer::DefaultValue(dt) => {
             // create a new range and fill with provided default value
             let mut new_range = Range::new((0, 0), (max_row, 0));
@@ -90,6 +100,7 @@ pub fn make_header(sheets: &[SheetExtractor]) -> Vec<&'static str> {
 #[derive(Clone)]
 pub enum ColIndexer {
     Index(u32),
+    CellValue(u32, u32),
     DefaultValue(DataType),
     ColFindFunc(Rc<dyn Fn(&Range<DataType>, u32) -> Range<DataType>>)
 }

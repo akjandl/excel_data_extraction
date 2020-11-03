@@ -1,12 +1,14 @@
 use calamine::{DataType, Range};
 use std::rc::Rc;
 
-use crate::excel_tools::column_finders::header_match;
+use crate::excel_tools::column_finders::{header_match, MatchMethod};
 use crate::excel_tools::{ColIndexer, Sheet, SheetExtractor};
 
-fn find_col(starts_with: &'static str) -> Rc<dyn Fn(&Range<DataType>, u32) -> Range<DataType>> {
+fn header_starts_with(
+    starts_with: &'static str,
+) -> Rc<dyn Fn(&Range<DataType>, u32) -> Range<DataType>> {
     Rc::new(move |ws: &Range<DataType>, row_count: u32| {
-        header_match(ws, starts_with, 0, row_count, None)
+        header_match(ws, MatchMethod::StartsWith(starts_with), 0, row_count, None)
     })
 }
 
@@ -21,11 +23,11 @@ pub fn get_extractors() -> Vec<SheetExtractor> {
             "Sample Type",
         ],
         col_indexers: vec![
-            ColIndexer::ColFindFunc(find_col("Test ID")),
-            ColIndexer::ColFindFunc(find_col("LICENSE NAME")),
-            ColIndexer::ColFindFunc(find_col("CUSTOMER LICENSE")),
-            ColIndexer::ColFindFunc(find_col("SAMPLE NAME")),
-            ColIndexer::ColFindFunc(find_col("SAMPLE TYPE")),
+            ColIndexer::ColFindFunc(header_starts_with("Test ID")),
+            ColIndexer::ColFindFunc(header_starts_with("LICENSE NAME")),
+            ColIndexer::ColFindFunc(header_starts_with("CUSTOMER LICENSE")),
+            ColIndexer::ColFindFunc(header_starts_with("SAMPLE NAME")),
+            ColIndexer::ColFindFunc(header_starts_with("SAMPLE TYPE")),
         ],
     });
 
@@ -39,11 +41,11 @@ pub fn get_extractors() -> Vec<SheetExtractor> {
             "Reported CFU/g",
         ],
         col_indexers: vec![
-            ColIndexer::ColFindFunc(find_col("TYM Sample Weight")),
-            ColIndexer::ColFindFunc(find_col("TYM Diluent Vol")),
-            ColIndexer::ColFindFunc(find_col("Colony Count")),
-            ColIndexer::ColFindFunc(find_col("Dilution Plate")),
-            ColIndexer::ColFindFunc(find_col("Metrc Reported CFU")),
+            ColIndexer::ColFindFunc(header_starts_with("TYM Sample Weight")),
+            ColIndexer::ColFindFunc(header_starts_with("TYM Diluent Vol")),
+            ColIndexer::ColFindFunc(header_starts_with("Colony Count")),
+            ColIndexer::ColFindFunc(header_starts_with("Dilution Plate")),
+            ColIndexer::ColFindFunc(header_starts_with("Metrc Reported CFU")),
         ],
     });
 

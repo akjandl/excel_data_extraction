@@ -1,12 +1,12 @@
 use calamine::{DataType, Range};
 use std::rc::Rc;
 
-use crate::excel_tools::column_finders::header_match;
+use crate::excel_tools::column_finders::{header_match, MatchMethod};
 use crate::excel_tools::{ColIndexer, PotentialSheet, Sheet, SheetExtractor, SheetSelector};
 
 fn find_col(starts_with: &'static str) -> Rc<dyn Fn(&Range<DataType>, u32) -> Range<DataType>> {
     Rc::new(move |ws: &Range<DataType>, row_count: u32| {
-        header_match(ws, starts_with, 0, row_count, None)
+        header_match(ws, MatchMethod::StartsWith(starts_with), 0, row_count, None)
     })
 }
 

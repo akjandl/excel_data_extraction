@@ -14,24 +14,43 @@ mod extractors;
 use extractors::get_extractors;
 
 // const ROOT_DIR: &str = "C:/Users/andre/Desktop/ExtractionTestData";
-const YEAR_DIR_REGEX: &str = r"(2019)|(2020)";
-const MONTH_DIR_REGEX: &str = r"\d{1,2}";
 const DAY_DIR_REGEX: &str = r"\d{2}-[[:alpha:]]{3}-\d{4}";
+
+fn parse_range_arg(range_str: String) -> Result<String, Box<dyn Error>> {
+    let start_stop: Vec<&str> = range_str.split('-').collect();
+    let start: u32 = start_stop[0].parse()?;
+    let mut end = start;
+    if start_stop.len() == 2 {
+        end = start_stop[1].parse()?;
+    }
+    Ok((start..=end)
+        .map(|i| i.to_string())
+        .collect::<Vec<String>>()
+        .join("|"))
+}
 
 fn main() -> Result<(), Box<dyn Error>> {
     // setup variables
     let args: Vec<String> = std::env::args().collect();
     println!("Searching in: {}", &args[1]);
     let root_path = Path::new(&args[1]).to_path_buf();
-    // TODO: get company name & test name from cli
     let company_param = args[2].to_string();
     let test_name_param = args[3].to_string();
+    let years_regex_str =
+        parse_range_arg(args[4].to_string()).expect("Could not parse years parameter");
+    let months_regex_str =
+        parse_range_arg(args[5].to_string()).expect("Could not parse months parameter");
     let test_type: String = vec![company_param, test_name_param].join("_");
 
     let test_type_regex =
         get_regex(test_type.as_str()).expect("Could not find regex for test type");
 
-    let cg_files = find_cg_files(&root_path, &test_type_regex);
+    let cg_files = find_cg_files(
+        &root_path,
+        &test_type_regex,
+        years_regex_str,
+        months_regex_str,
+    );
     println!("Files to be processed: {}", cg_files.len());
 
     let extractors = get_extractors(&test_type)?;
@@ -117,9 +136,14 @@ fn write_data<W: Write>(dest: &mut W, data: Vec<Vec<DataType>>) -> std::io::Resu
     Ok(())
 }
 
-fn find_cg_files(root: &PathBuf, regex_struct: &TestTypeRegex) -> Vec<PathBuf> {
-    let year_regex = Regex::new(YEAR_DIR_REGEX).unwrap();
-    let months_regex = Regex::new(MONTH_DIR_REGEX).unwrap();
+fn find_cg_files(
+    root: &PathBuf,
+    regex_struct: &TestTypeRegex,
+    year_dir_regex: String,
+    month_dir_regex: String,
+) -> Vec<PathBuf> {
+    let year_regex = Regex::new(year_dir_regex.as_str()).unwrap();
+    let months_regex = Regex::new(month_dir_regex.as_str()).unwrap();
     let days_regex = RegexBuilder::new(DAY_DIR_REGEX)
         .case_insensitive(true)
         .build()
@@ -206,6 +230,10 @@ fn get_regex(test_type: &str) -> Option<TestTypeRegex> {
         "agricor_micro" => Some(TestTypeRegex::new(
             "^agricor micro ",
             r"^cert generator agricor micro .*\.xlsm$",
+        )),
+        "agricor_potency" => Some(TestTypeRegex::new(
+            "^agricor potency ",
+            r"^cert generator agricor potency .*\.xlsm$",
         )),
         _ => None,
     }
