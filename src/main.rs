@@ -13,21 +13,7 @@ mod extractors;
 
 use extractors::get_extractors;
 
-// const ROOT_DIR: &str = "C:/Users/andre/Desktop/ExtractionTestData";
 const DAY_DIR_REGEX: &str = r"\d{2}-[[:alpha:]]{3}-\d{4}";
-
-fn parse_range_arg(range_str: String) -> Result<String, Box<dyn Error>> {
-    let start_stop: Vec<&str> = range_str.split('-').collect();
-    let start: u32 = start_stop[0].parse()?;
-    let mut end = start;
-    if start_stop.len() == 2 {
-        end = start_stop[1].parse()?;
-    }
-    Ok((start..=end)
-        .map(|i| i.to_string())
-        .collect::<Vec<String>>()
-        .join("|"))
-}
 
 fn main() -> Result<(), Box<dyn Error>> {
     // setup variables
@@ -160,6 +146,19 @@ fn find_cg_files(
         .filter(|p| p.is_dir())
         .flat_map(|p| match_child_paths(&p, &regex_struct.file))
         .collect()
+}
+
+fn parse_range_arg(range_str: String) -> Result<String, Box<dyn Error>> {
+    let start_stop: Vec<&str> = range_str.split('-').collect();
+    let start: u32 = start_stop[0].parse()?;
+    let mut end = start;
+    if start_stop.len() == 2 {
+        end = start_stop[1].parse()?;
+    }
+    Ok((start..=end)
+        .map(|i| i.to_string())
+        .collect::<Vec<String>>()
+        .join("|"))
 }
 
 fn match_child_paths(parent_dir: &PathBuf, child_regex: &Regex) -> Vec<PathBuf> {
