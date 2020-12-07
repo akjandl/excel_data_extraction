@@ -1,8 +1,9 @@
 use calamine::{DataType, Range};
 
+use crate::extractors::ExtractionManager;
 use crate::excel_tools::{ColIndexer, PotentialSheet, Sheet, SheetExtractor, SheetSelector};
 
-pub fn get_extractors() -> Vec<SheetExtractor> {
+pub fn get_extractors() -> ExtractionManager {
     let mid_2020_validator = ("AgrBotMap", |ws: &Range<DataType>| {
         if let Some(dt) = ws.get_value((0, 3)) {
             match dt {
@@ -132,11 +133,11 @@ pub fn get_extractors() -> Vec<SheetExtractor> {
         ],
     });
 
-    vec![
+    ExtractionManager::RowGrain(vec![
         test_id_sheet,
         sample_info_sheet,
         tym_values,
         tot_aerobic_values,
         tot_col_values,
-    ]
+    ])
 }

@@ -3,6 +3,7 @@ use std::rc::Rc;
 
 use crate::excel_tools::column_finders::{header_match, MatchMethod};
 use crate::excel_tools::{ColIndexer, PotentialSheet, Sheet, SheetExtractor, SheetSelector};
+use crate::extractors::ExtractionManager;
 
 fn find_col(starts_with: &'static str) -> Rc<dyn Fn(&Range<DataType>, u32) -> Range<DataType>> {
     Rc::new(move |ws: &Range<DataType>, row_count: u32| {
@@ -10,7 +11,7 @@ fn find_col(starts_with: &'static str) -> Rc<dyn Fn(&Range<DataType>, u32) -> Ra
     })
 }
 
-pub fn get_extractors() -> Vec<SheetExtractor> {
+pub fn get_extractors() -> ExtractionManager {
     let early_2019_validator = |ws: &Range<DataType>| -> bool {
         if let Some(dt) = ws.get_value((0, 2)) {
             match dt {
@@ -170,5 +171,5 @@ pub fn get_extractors() -> Vec<SheetExtractor> {
         ],
     });
 
-    vec![master_list, results]
+    ExtractionManager::RowGrain(vec![master_list, results])
 }

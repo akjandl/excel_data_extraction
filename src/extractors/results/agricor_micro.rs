@@ -3,6 +3,7 @@ use std::rc::Rc;
 
 use crate::excel_tools::column_finders::{header_match, MatchMethod};
 use crate::excel_tools::{ColIndexer, Sheet, SheetExtractor};
+use crate::extractors::ExtractionManager;
 
 fn header_starts_with(
     starts_with: &'static str,
@@ -12,7 +13,7 @@ fn header_starts_with(
     })
 }
 
-pub fn get_extractors() -> Vec<SheetExtractor> {
+pub fn get_extractors() -> ExtractionManager {
     let master_list = SheetExtractor::Single(Sheet {
         sheet_name: "Master List",
         col_names: vec![
@@ -49,5 +50,5 @@ pub fn get_extractors() -> Vec<SheetExtractor> {
         ],
     });
 
-    vec![master_list, tym_sheet]
+    ExtractionManager::RowGrain(vec![master_list, tym_sheet])
 }

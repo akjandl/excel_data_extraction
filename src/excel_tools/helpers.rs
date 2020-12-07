@@ -2,6 +2,7 @@ use std::rc::Rc;
 
 use calamine::{DataType, Range, Reader, Xlsx};
 use std::io::{Read, Seek};
+use crate::extractors::ExtractionManager;
 
 pub fn find_active_rows(ws: &Range<DataType>, search_col: u32, last_row: Option<u32>) -> Vec<u32> {
     let bottom_row = match last_row {
@@ -38,7 +39,7 @@ pub fn extract_column(
 ) -> Range<DataType> {
     match col_indexer {
         ColIndexer::Index(i) => range.range((1, *i), (max_row, *i)),
-        ColIndexer::CellValue(row, col) => {
+        ColIndexer::CellValue{row, col} => {
             // create a new range and fill with a single value from a specific cell
             let mut new_range = Range::new((0, 0), (max_row, 0));
             let cell_val = match range.get_value((*row, *col)) {
@@ -87,7 +88,11 @@ pub fn rows_from_cols(cols: Vec<Range<DataType>>, active_rows: Vec<u32>) -> Vec<
     rows_data
 }
 
-pub fn make_header(sheets: &[SheetExtractor]) -> Vec<&'static str> {
+pub fn make_header(extraction_manager: &ExtractionManager) -> Vec<&'static str> {
+    let sheets = match extraction_manager {
+        ExtractionManager::FileGrain(ex) => ex,
+        ExtractionManager::RowGrain(ex) => ex,
+    };
     sheets
         .iter()
         .flat_map(|s| match s {
@@ -100,7 +105,7 @@ pub fn make_header(sheets: &[SheetExtractor]) -> Vec<&'static str> {
 #[derive(Clone)]
 pub enum ColIndexer {
     Index(u32),
-    CellValue(u32, u32),
+    CellValue{row: u32, col: u32},
     DefaultValue(DataType),
     ColFindFunc(Rc<dyn Fn(&Range<DataType>, u32) -> Range<DataType>>)
 }
