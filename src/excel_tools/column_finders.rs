@@ -1,8 +1,13 @@
 use calamine::{DataType, Range};
 
+pub enum MatchMethod {
+    StartsWith(&'static str),
+    Exact(&'static str),
+}
+
 pub fn header_match(
     ws: &Range<DataType>,
-    starts_with: &str,
+    match_method: MatchMethod,
     header_row: u32,
     row_count: u32,
     start_offset: Option<u32>,
@@ -20,11 +25,23 @@ pub fn header_match(
         let (_row, col, val) = cell;
         match val {
             DataType::String(s) => {
-                if s.starts_with(starts_with) {
-                    return ws.range(
-                        (range_offset, col as u32),
-                        (range_offset + row_count, col as u32),
-                    );
+                match match_method {
+                    MatchMethod::StartsWith(match_str) => {
+                        if s.starts_with(match_str) {
+                            return ws.range(
+                                (range_offset, col as u32),
+                                (range_offset + row_count, col as u32),
+                            );
+                        }
+                    }
+                    MatchMethod::Exact(match_str) => {
+                        if s == match_str {
+                            return ws.range(
+                                (range_offset, col as u32),
+                                (range_offset + row_count, col as u32),
+                            )
+                        }
+                    }
                 }
             }
             _ => continue,
