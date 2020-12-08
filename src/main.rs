@@ -78,11 +78,11 @@ fn file_to_rows_data(
 
     let validated_extractors = excel_tools::validate_extractors(&mut excel, &sheet_extractors);
     if validated_extractors.is_none() {
-        return Err(format!(
+        println!(
             "File failed sheet validation and will be skipped: {}",
             file.to_str().unwrap()
-        )
-        .into());
+        );
+        return Ok(vec![]);
     }
 
     let mut active_rows = vec![];
